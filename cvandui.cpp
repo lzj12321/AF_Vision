@@ -7,7 +7,7 @@
 
 cvAndUi::cvAndUi()
 {
-1231
+1231asdsadsads
 }
 
 double cvAndUi::adjustMatSizeToShow(cv::Mat&mat,cv::Mat&dst, QLabel *label)
