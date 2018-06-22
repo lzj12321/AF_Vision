@@ -15,6 +15,10 @@ nccMatchWidget::nccMatchWidget(QWidget *parent):
     ui(new Ui::nccMatchWidget)
 {
     ui->setupUi(this);
+    paramPath="/home/lzj/Documents/QtProjects/build-AF_Vision-Desktop_Qt_5_10_1_GCC_64bit-Debug";
+    ui->lineEdit_6->setText("200");
+    ui->lineEdit_2->setText("0.5");
+    ui->lineEdit->setText("4");
 }
 
 nccMatchWidget::~nccMatchWidget()
@@ -26,8 +30,6 @@ STR_Vision_Result nccMatchWidget::ncc_Match(cv::Mat &srcMat,int model)
 {
     STR_Vision_Result str_nccMatchResult;
     --model;
-    matchScore=-2;
-    matchAngle=0;
     matchStatus=false;
 
     if(model<0||modelNum==0||model>=modelNum){
@@ -44,20 +46,19 @@ STR_Vision_Result nccMatchWidget::ncc_Match(cv::Mat &srcMat,int model)
     cv::Mat roiMat;
     getRoiMat(srcMat,roiMat);
 
-    nccmatch.nccMatch(roiMat,vecMatchThreshold[model].toDouble(),true,true);
-    matchStatus=nccmatch.matchStatus;
+    NccMatchResult matchResult=nccmatch.nccMatch(roiMat,vecMatchThreshold[model].toDouble());
+    if(matchResult.matchValue<vecMatchThreshold[model].toDouble())
+        matchStatus=false;
+    else
+        matchStatus=true;
     if(matchStatus){
-        str_nccMatchResult.x=nccmatch.nccMatchPoint.x+roiX;
-        str_nccMatchResult.y=nccmatch.nccMatchPoint.y+roiY;
-        str_nccMatchResult.angle=nccmatch.nccMatchAngle;
-        str_nccMatchResult.socore=nccmatch.nccMatchScore;
+        str_nccMatchResult.x=matchResult.matchPoint.x+roiX;
+        str_nccMatchResult.y=matchResult.matchPoint.y+roiY;
+        str_nccMatchResult.angle=matchResult.matchAngle;
+        str_nccMatchResult.socore=matchResult.matchValue;
         str_nccMatchResult.model=model+1;
         str_nccMatchResult.errorFlag=1;
         str_nccMatchResult.matchStatus=matchStatus;
-
-        matchPoint=nccmatch.nccMatchPoint;
-        matchAngle=nccmatch.nccMatchAngle;
-        matchScore=nccmatch.nccMatchScore;
     }else{
         str_nccMatchResult.model=0;
         str_nccMatchResult.errorFlag=0;
@@ -89,17 +90,6 @@ cv::Mat nccMatchWidget::getResultImg(cv::Mat&src)
     }
     sourceMat=src.clone();
     return drawResultOnMat();
-}
-
-cv::Point2f nccMatchWidget::getMatchPoint()
-{
-    cv::Point2f p(matchPoint.x,matchPoint.y);
-    return p;
-}
-
-float nccMatchWidget::getMatchAngle()
-{
-    return matchAngle;
 }
 
 void nccMatchWidget::on_pushButton_4_clicked()
@@ -306,8 +296,6 @@ void nccMatchWidget::on_pushButton_7_clicked()
     vecMatchThreshold[index]=ui->lineEdit_2->text();
     vecDownSampleTime[index]=ui->lineEdit->text().toInt();
 
-    nccmatch.setAngleMatchRange(vecAngleMatchRange[index]);
-    nccmatch.setRotateAndMaskFlag(true,true);
 
     vecRoiX[index]=roiX;
     vecRoiHeight[index]=roiHeight;
@@ -378,12 +366,13 @@ void nccMatchWidget::on_pushButton_clicked()
 void nccMatchWidget::on_pushButton_5_clicked()
 {
     NCC_Match temporyNccMatch;
+    NccMatchResult temporyNccMatchResult;
     float threshold=ui->lineEdit_2->text().toFloat();
     if(threshold<=0||threshold>1)
         threshold=0.5;
 
     int angleMatchRange=ui->lineEdit_6->text().toInt();
-    if(angleMatchRange<0)
+    if(angleMatchRange<0||angleMatchRange>360)
         angleMatchRange=360;
 
     restorePaintingStatus();
@@ -403,7 +392,6 @@ void nccMatchWidget::on_pushButton_5_clicked()
 
     cv::Mat temp=templateMat.clone();
     nccGenerateTemplate(temp,maskMat,temporyNccMatch,isEnableMask,isEnableRotate,downSampleTime);
-    temporyNccMatch.setAngleMatchRange(angleMatchRange);
 
     QTime nccMatchTimer;
     nccMatchTime=0;
@@ -413,13 +401,13 @@ void nccMatchWidget::on_pushButton_5_clicked()
     if(src.type()!=CV_8UC1){
         cv::cvtColor(src,src,cv::COLOR_RGB2GRAY);
     }
-    temporyNccMatch.nccMatch(src,threshold,isEnableMask,isEnableRotate);
+    temporyNccMatchResult=temporyNccMatch.nccMatch(src,threshold,angleMatchRange);
 
     nccMatchTime=nccMatchTimer.elapsed();
     cv::Mat resultMat;
-    resultMat=drawResultOnMat(temporyNccMatch);
+    resultMat=drawResultOnMat(temporyNccMatchResult);
     showMatOnDlg(resultMat,ui->label_6,&ratio);
-    outPutMatchResult(temporyNccMatch);
+    outPutMatchResult(temporyNccMatch,temporyNccMatchResult);
     showMatOnDlg(tempMaskShowMat,ui->label_5);
 }
 
@@ -430,7 +418,6 @@ bool nccMatchWidget::nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnable
         qDebug()<<"temp.empty()||mask.empty()||temp.size!=mask.size"<<endl;
         return false;
     }
-    nccmatch.setRotateAndMaskFlag(isEnableRotate,isEnableMask);
     cv::Mat t,m;
     if(temp.type()!=CV_8UC1){
         cv::cvtColor(temp,t,cv::COLOR_RGB2GRAY);
@@ -449,7 +436,6 @@ bool nccMatchWidget::nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnable
 bool nccMatchWidget::nccGenerateTemplate(cv::Mat &temp, cv::Mat &mask, NCC_Match &nccmatch,bool isEnableMask,bool isEnableRotate,uint downSampleTime)
 {
     if(temp.empty()||mask.empty()||temp.size!=mask.size)return false;
-    nccmatch.setRotateAndMaskFlag(isEnableRotate,isEnableMask);
     cv::Mat t,m;
     if(temp.type()!=CV_8UC1){
         cv::cvtColor(temp,t,cv::COLOR_RGB2GRAY);
@@ -482,7 +468,7 @@ void nccMatchWidget::outPutMatchResult()
         ui->textEdit->append(QString::number((long)nccmatch.VEC_matchPointsxx[i].size(),10)+ " match points:");
         for(int j=0;j<nccmatch.VEC_matchPointsxx[i].size();j++){
             ui->textEdit->append("Point:("+QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchPoint.x,10)+","+QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchPoint.y,10)+")");
-            ui->textEdit->append("Angle:"+ QString::number((long)nccmatch.VEC_matchPointsxx[i][j].angle,10));
+            ui->textEdit->append("Angle:"+ QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchAngle,10));
             ui->textEdit->append(QString("Value:%1").arg(nccmatch.VEC_matchPointsxx[i][j].matchValue));
             ui->textEdit->append(" ");
         }
@@ -490,9 +476,9 @@ void nccMatchWidget::outPutMatchResult()
     }
     ui->textEdit->append("Total used time:"+QString::number(nccMatchTime,10));
     ui->textEdit->append("ncc match used time:"+QString::number(matchUseTime,10));
-    ui->textEdit->append("ncc match point:("+QString::number((long)nccmatch.nccMatchPoint.x,10)+","+QString::number((long)nccmatch.nccMatchPoint.y,10)+")");
-    ui->textEdit->append("ncc match angle:"+QString::number(nccmatch.nccMatchAngle,10));
-    ui->textEdit->append(QString("ncc match value:%1").arg(nccmatch.nccMatchScore));
+    ui->textEdit->append("ncc match point:("+QString::number((long)matchResult.matchPoint.x,10)+","+QString::number((long)matchResult.matchPoint.y,10)+")");
+    ui->textEdit->append("ncc match angle:"+QString::number(matchResult.matchAngle,10));
+    ui->textEdit->append(QString("ncc match value:%1").arg(matchResult.matchValue));
 
     QFile recordFile("record.txt");
     if(recordFile.open(QFile::WriteOnly|QIODevice::Append)){
@@ -504,14 +490,14 @@ void nccMatchWidget::outPutMatchResult()
         out<<"Img size("<<QString::number(roiWidth,10)+","<<QString::number(roiHeight,10)<<")"<<"\r\n";
         out<<"Total used time:"+QString::number(nccMatchTime,10)<<"\r\n";
         out<<"ncc match used time:"+QString::number(matchUseTime,10)<<"\r\n";
-        out<<"ncc match point:("+QString::number((long)nccmatch.nccMatchPoint.x,10)+","+QString::number((long)nccmatch.nccMatchPoint.y,10)+")"<<"\r\n";
-        out<<"ncc match angle:"+QString::number(nccmatch.nccMatchAngle,10)<<"\r\n";
-        out<<QString("ncc match value:%1").arg(nccmatch.nccMatchScore)<<"\r\n";
+        out<<"ncc match point:("+QString::number((long)matchResult.matchPoint.x,10)+","+QString::number((long)matchResult.matchPoint.y,10)+")"<<"\r\n";
+        out<<"ncc match angle:"+QString::number(matchResult.matchAngle,10)<<"\r\n";
+        out<<QString("ncc match value:%1").arg(matchResult.matchValue)<<"\r\n";
         out<<"\r\n";
     }
 }
 
-void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch)
+void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch,NccMatchResult&nccmatchResult)
 {
     ui->textEdit->clear();
     int matchUseTime=0;
@@ -524,7 +510,7 @@ void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch)
         ui->textEdit->append(QString::number((long)nccmatch.VEC_matchPointsxx[i].size(),10)+ " match points:");
         for(int j=0;j<nccmatch.VEC_matchPointsxx[i].size();j++){
             ui->textEdit->append("Point:("+QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchPoint.x,10)+","+QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchPoint.y,10)+")");
-            ui->textEdit->append("Angle:"+ QString::number((long)nccmatch.VEC_matchPointsxx[i][j].angle,10));
+            ui->textEdit->append("Angle:"+ QString::number((long)nccmatch.VEC_matchPointsxx[i][j].matchAngle,10));
             ui->textEdit->append(QString("Value:%1").arg(nccmatch.VEC_matchPointsxx[i][j].matchValue));
             ui->textEdit->append(" ");
         }
@@ -532,9 +518,9 @@ void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch)
     }
     ui->textEdit->append("Total used time:"+QString::number(nccMatchTime,10));
     ui->textEdit->append("ncc match used time:"+QString::number(matchUseTime,10));
-    ui->textEdit->append("ncc match point:("+QString::number((long)nccmatch.nccMatchPoint.x,10)+","+QString::number((long)nccmatch.nccMatchPoint.y,10)+")");
-    ui->textEdit->append("ncc match angle:"+QString::number(nccmatch.nccMatchAngle,10));
-    ui->textEdit->append(QString("ncc match value:%1").arg(nccmatch.nccMatchScore));
+    ui->textEdit->append("ncc match point:("+QString::number((long)nccmatchResult.matchPoint.x,10)+","+QString::number((long)nccmatchResult.matchPoint.y,10)+")");
+    ui->textEdit->append("ncc match angle:"+QString::number(nccmatchResult.matchAngle,10));
+    ui->textEdit->append(QString("ncc match value:%1").arg(nccmatchResult.matchValue));
 
     QFile recordFile("record.txt");
     if(recordFile.open(QFile::WriteOnly|QIODevice::Append)){
@@ -546,9 +532,9 @@ void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch)
         out<<"Img size("<<QString::number(roiWidth,10)+","<<QString::number(roiHeight,10)<<")"<<"\r\n";
         out<<"Total used time:"+QString::number(nccMatchTime,10)<<"\r\n";
         out<<"ncc match used time:"+QString::number(matchUseTime,10)<<"\r\n";
-        out<<"ncc match point:("+QString::number((long)nccmatch.nccMatchPoint.x,10)+","+QString::number((long)nccmatch.nccMatchPoint.y,10)+")"<<"\r\n";
-        out<<"ncc match angle:"+QString::number(nccmatch.nccMatchAngle,10)<<"\r\n";
-        out<<QString("ncc match value:%1").arg(nccmatch.nccMatchScore)<<"\r\n";
+        out<<"ncc match point:("+QString::number((long)nccmatchResult.matchPoint.x,10)+","+QString::number((long)nccmatchResult.matchPoint.y,10)+")"<<"\r\n";
+        out<<"ncc match angle:"+QString::number(nccmatchResult.matchAngle,10)<<"\r\n";
+        out<<QString("ncc match value:%1").arg(nccmatchResult.matchValue)<<"\r\n";
         out<<"\r\n";
     }
 }
@@ -561,10 +547,10 @@ cv::Mat nccMatchWidget::drawResultOnMat()
         cv::cvtColor(sourceMat,resultMat,cv::COLOR_GRAY2BGR);
     else
         resultMat=sourceMat.clone();
-    if(nccmatch.matchStatus)
+    if(matchStatus)
         drawRoiOnMat(resultMat);
 
-    if(nccmatch.matchStatus){
+    if(matchStatus){
         int x=roiX;
         int y=roiY;
         int w=roiWidth;
@@ -578,13 +564,13 @@ cv::Mat nccMatchWidget::drawResultOnMat()
             h=resultMat.rows;
         }
         cv::Mat r=resultMat(cv::Rect(x,y,w,h));
-        cv::RotatedRect rotate_rect=cv::RotatedRect(nccmatch.nccMatchPoint,cv::Size2f(templateMat.cols,templateMat.rows),360-nccmatch.nccMatchAngle);
+        cv::RotatedRect rotate_rect=cv::RotatedRect(matchResult.matchPoint,cv::Size2f(templateMat.cols,templateMat.rows),360-matchResult.matchAngle);
         cv::Point2f vertices[4];
         rotate_rect.points(vertices);
         for (int j = 0; j < 4; ++j){
             cv::line(r, vertices[j], vertices[(j + 1) % 4], cv::Scalar(0, 255, 0),2);
         }
-        cv::circle(r,nccmatch.nccMatchPoint,4,cv::Scalar(0,0,255),-1);
+        cv::circle(r,matchResult.matchPoint,4,cv::Scalar(0,0,255),-1);
 
         cv::Mat t=resultMat(cv::Rect(x,y,w,h));
         if(r.cols==t.cols&&r.rows==t.rows)
@@ -593,31 +579,31 @@ cv::Mat nccMatchWidget::drawResultOnMat()
 
     char positionText[50]="Point:Null!";
     cv::Point textPosition = cv::Point(70, 120);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText, "Point:(%d,%d)",nccmatch.nccMatchPoint.x+roiX,nccmatch.nccMatchPoint.y+roiY);
+        sprintf(positionText, "Point:(%d,%d)",matchResult.matchPoint.x+roiX,matchResult.matchPoint.y+roiY);
     }
     putText(resultMat, positionText, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
 
     char positionText2[50]="Angle:Null!";
     textPosition = cv::Point(70, 220);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText2, "Angle:%d", matchAngle);
+        sprintf(positionText2, "Angle:%d", matchResult.matchAngle);
     }
     putText(resultMat, positionText2, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
 
     char positionText3[50]="Value:Null";
     textPosition = cv::Point(70, 320);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText3, "Value::%.3f",matchScore);
+        sprintf(positionText3, "Value::%.3f",matchResult.matchValue);
         putText(resultMat, positionText3, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
     }
     return resultMat;
 }
 
-cv::Mat nccMatchWidget::drawResultOnMat(NCC_Match&nccmatch)
+cv::Mat nccMatchWidget::drawResultOnMat(NccMatchResult&nccMatchResult)
 {
     cv::Mat resultMat;
     if(sourceMat.empty())return resultMat;
@@ -643,40 +629,41 @@ cv::Mat nccMatchWidget::drawResultOnMat(NCC_Match&nccmatch)
         h=resultMat.rows;
     }
     cv::Mat r=resultMat(cv::Rect(x,y,w,h));
-    cv::RotatedRect rotate_rect=cv::RotatedRect(nccmatch.nccMatchPoint,cv::Size2f(templateMat.cols,templateMat.rows),360-nccmatch.nccMatchAngle);
+    cv::RotatedRect rotate_rect=cv::RotatedRect(nccMatchResult.matchPoint,cv::Size2f(templateMat.cols,templateMat.rows),360-nccMatchResult.matchAngle);
     cv::Point2f vertices[4];
     rotate_rect.points(vertices);
     for (int j = 0; j < 4; ++j){
         cv::line(r, vertices[j], vertices[(j + 1) % 4], cv::Scalar(0, 255, 0),2);
     }
-    cv::circle(r,nccmatch.nccMatchPoint,4,cv::Scalar(0,0,255),-1);
+    cv::circle(r,nccMatchResult.matchPoint,4,cv::Scalar(0,0,255),-1);
 
     cv::Mat t=resultMat(cv::Rect(x,y,w,h));
     if(r.cols==t.cols&&r.rows==t.rows)
         r.copyTo(t);
     drawRoiOnMat(resultMat,roiX,roiY,roiWidth,roiHeight);
-
+    if(nccMatchResult.matchValue>0)
+        matchStatus=true;
     char positionText[50]="Point:Null!";
     cv::Point textPosition = cv::Point(70, 120);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText, "Point:(%d,%d)",nccmatch.nccMatchPoint.x+roiX,nccmatch.nccMatchPoint.y+roiY);
+        sprintf(positionText, "Point:(%d,%d)",nccMatchResult.matchPoint.x+roiX,nccMatchResult.matchPoint.y+roiY);
     }
     putText(resultMat, positionText, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
 
     char positionText2[50]="Angle:Null!";
     textPosition = cv::Point(70, 220);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText2, "Angle:%d",nccmatch.nccMatchAngle);
+        sprintf(positionText2, "Angle:%d",nccMatchResult.matchAngle);
     }
     putText(resultMat, positionText2, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
 
     char positionText3[50]="Value:Null";
     textPosition = cv::Point(70, 320);
-    if(nccmatch.matchStatus)
+    if(matchStatus)
     {
-        sprintf(positionText3, "Value::%.3f",nccmatch.nccMatchScore);
+        sprintf(positionText3, "Value::%.3f",nccMatchResult.matchValue);
         putText(resultMat, positionText3, textPosition, 2, 1.5, CV_RGB(255, 200, 100),2);
     }
     return resultMat;
@@ -749,7 +736,6 @@ void nccMatchWidget::uiInitialize(int model)
     else
     {
         cv::Mat t=cv::Mat(ui->label_5->width(),ui->label_5->height(),CV_8UC1,cv::Scalar::all(255));
-
         showMatOnDlg(t,ui->label_5);
     }
     if(!sourceMat.empty()){
@@ -860,8 +846,6 @@ void nccMatchWidget::nccInitialize(int model)
     setModelParam(model);
     uiInitialize(model);
 
-    nccmatch.setAngleMatchRange(vecAngleMatchRange[model]);
-    nccmatch.setRotateAndMaskFlag(true,true);
     if(templateMat.empty()||maskMat.empty()){
         nccStatus=false;
         return;

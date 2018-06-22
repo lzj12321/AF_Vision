@@ -31,22 +31,7 @@ NCC_Match::~NCC_Match()
     }
 }
 
-void NCC_Match::preProcessTemplate(cv::Mat &temp)
-{
-
-}
-
-void NCC_Match::preProcessSource(cv::Mat &src)
-{
-
-}
-
-void NCC_Match::setAngleMatchRange(unsigned short i)
-{
-    angleMatchRange=i;
-}
-
-void NCC_Match::dataInitialize(ushort num)
+void NCC_Match::paramInitialize(ushort num)
 {
     if(layerThreshold!=nullptr){
         delete[] layerThreshold;
@@ -65,45 +50,14 @@ void NCC_Match::dataInitialize(ushort num)
     layerAngleMatchRange=new ushort[num+1];
     layerCoordinateMatchRange=new ushort[num+1];
     for(int i=num;i>=0;i--){
-        //        double value=i/10.0+0.2;
-        //        if(value>=0.7)
-        //            value=0.6;
-        //        else if(value<0.3)
-        //            value=0.3;
         layerThreshold[i]=0.5;
-        // if(i==num-1){
         layerAngleMatchRange[i]=3;
         layerCoordinateMatchRange[i]=2;
-        //        }
         if(i==1||i==0){
             layerAngleMatchRange[i]=1;
             layerCoordinateMatchRange[i]=1;
         }
-        //        else if(i==num-2){
-        //            layerAngleMatchRange[i]=2;
-        //            layerCoordinateMatchRange[i]=2;
-        //        }
-        //        else{
-        //            layerAngleMatchRange[i]=1;
-        //            layerCoordinateMatchRange[i]=2;
-        //        }
     }
-}
-
-int NCC_Match::reckonDownSampleTime(cv::Mat &src)
-{
-    int m=(src.cols<src.rows)?src.cols:src.rows;
-    if(m<10)return 0;
-    int i=1;
-    while((m/pow(2,++i))>10){
-    };
-    qDebug()<<"down sample time:"<<i;
-    return i-1;
-}
-
-cv::Point NCC_Match::getMatchPoint()
-{
-    return nccMatchPoint;
 }
 
 void NCC_Match::setTemplateAndMask(cv::Mat &tmp,cv::Mat &mask,ushort downSampleTime)
@@ -128,14 +82,14 @@ void NCC_Match::setTemplateAndMask(cv::Mat &tmp,cv::Mat &mask,ushort downSampleT
 
     if(downSampleTime==0)
     {
-        downSamplingNum=reckonDownSampleTime(templateMat);
+        downSamplingNum=defaultDownSampleTime;
     }
     else
     {
         downSamplingNum=downSampleTime;
     }
     cout<<"AI choose downsample time:"<<downSamplingNum<<endl;
-    dataInitialize(downSamplingNum);
+    paramInitialize(downSamplingNum);
     initializeTemplate(tmp,mask,downSamplingNum);
     cout<<"initialize template time:"<<timer.elapsed()<<endl;
 }
@@ -162,13 +116,13 @@ void NCC_Match::generateTemplateAndMask(cv::Mat &tmp, cv::Mat &mask, ushort samp
 
     if(sampleTime==0)
     {
-        downSamplingNum=reckonDownSampleTime(templateMat);
+        downSamplingNum=defaultDownSampleTime;
     }
     else
     {
         downSamplingNum=sampleTime;
     }
-    dataInitialize(downSamplingNum);
+    paramInitialize(downSamplingNum);
     generateTemplate(tmp,mask,downSamplingNum);
 }
 
@@ -189,13 +143,8 @@ void NCC_Match::initializeTemplate(cv::Mat &tmp, cv::Mat &mask,ushort initialize
         std::vector<cv::Mat> _vec_rotateMaskImg;
         _vec_rotateTempImg.reserve(360);
         _vec_rotateMaskImg.reserve(360);
-        if(!enableRotate){
-            _vec_rotateTempImg.push_back(downSampleTmp);
-            _vec_rotateMaskImg.push_back(downSampleMask);
-        }else{
-            generateRotateTemplate(rotateTempStepSize,downSampleTmp,_vec_rotateTempImg);
-            generateRotateTemplate(rotateTempStepSize,downSampleMask,_vec_rotateMaskImg);
-        }
+        generateRotateTemplate(rotateTempStepSize,downSampleTmp,_vec_rotateTempImg);
+        generateRotateTemplate(rotateTempStepSize,downSampleMask,_vec_rotateMaskImg);
         std::vector<str_img_data> _vec_imgData;
         _vec_imgData.reserve(360);
         for(short int j=0;j<_vec_rotateTempImg.size();++j){
@@ -232,13 +181,8 @@ void NCC_Match::generateTemplate(cv::Mat &tmp, cv::Mat &mask, ushort DownSampleT
         std::vector<cv::Mat> _vec_rotateMaskImg;
         _vec_rotateTempImg.reserve(360);
         _vec_rotateMaskImg.reserve(360);
-        if(!enableRotate){
-            _vec_rotateTempImg.push_back(vec_downSampleTemp[i]);
-            _vec_rotateMaskImg.push_back(vec_downSampleMask[i]);
-        }else{
-            generateRotateTemplate(rotateTempStepSize,vec_downSampleTemp[i],_vec_rotateTempImg);
-            generateRotateTemplate(rotateTempStepSize,vec_downSampleMask[i],_vec_rotateMaskImg);
-        }
+        generateRotateTemplate(rotateTempStepSize,vec_downSampleTemp[i],_vec_rotateTempImg);
+        generateRotateTemplate(rotateTempStepSize,vec_downSampleMask[i],_vec_rotateMaskImg);
         std::vector<str_img_data> _vec_imgData;
         _vec_imgData.reserve(360);
         for(short int j=0;j<_vec_rotateTempImg.size();++j){
@@ -297,66 +241,45 @@ inline void NCC_Match::_calculateImgData(cv::Mat &temp, cv::Mat &mask, str_img_d
     imgData->imgStandardDeviation=sqrt(imgData->diffMat.dot(imgData->diffMat));
 }
 
-void NCC_Match::nccMatch(cv::Mat &src, float thresholdValue, bool maskFlag, bool rotateFlag, ushort matchNum)
+NccMatchResult NCC_Match::nccMatch(cv::Mat &src, float thresholdValue,int anleMatchRange, ushort matchNum)
 {
+    NccMatchResult bestMatchPoint;
     dataClearBeforeMatch();
-    matchStatus=true;
-    // startMatchLayer=downSamplingNum;
 
     if(VEC_rotateTempData.size()==0||src.empty()||src.cols<VEC_rotateTempData[0][0].imgCols||src.rows<VEC_rotateTempData[0][0].imgRows)
     {
         qDebug()<<"VEC_rotateTempData.size()==0||src.empty()||src.cols<VEC_rotateTempData[0][0].imgCols||src.rows<VEC_rotateTempData[0][0].imgRows";
         VEC_matchPointsxx.clear();
-        matchStatus=false;
-        return;
+        return bestMatchPoint;
     }
 
-    enableMask=maskFlag;
-    enableRotate=rotateFlag;
-
-    src.copyTo(srcMat);
-    generateDownSampleSrc(srcMat);
-    std::vector<std::vector<str_matchPoint>>VEC_matchPoints;
+    generateDownSampleSrc(src);
+    std::vector<std::vector<NccMatchResult>>VEC_matchPoints;
     ///////////corase match return the stop layer///////////////
-    int layer=nccCoarseMatch(downSamplingNum,VEC_matchPoints);
+    nccCoarseMatch(downSamplingNum,VEC_matchPoints,anleMatchRange);
+    if(VEC_matchPoints[0].size()==0)
+    {
+        qDebug()<<"VEC_matchPoints[0].size()==0";
+        return bestMatchPoint;
+    }
     ///////////precise match start match form the stop layer //
+    int layer=downSamplingNum;
     nccPreciseMatch(layer,VEC_matchPoints);
 
-    if(VEC_matchPoints.size()<=(downSamplingNum-stopMatchLayer-downSamplingNum+layer)){
-        qDebug()<<"VEC_matchPoints.size()<=(startMatchLayer-stopMatchLayer)";
-        qDebug()<<"VEC_matchPoints.size():"<<VEC_matchPoints.size();
-        matchStatus=false;
-        return;
-    }
+//    if(VEC_matchPoints.size()<=layer){
+//        qDebug()<<"VEC_matchPoints.size()<=(startMatchLayer-stopMatchLayer)";
+//        qDebug()<<"VEC_matchPoints.size():"<<VEC_matchPoints.size();
+//        return bestMatchPoint;
+//    }
+
     ///////////filtrate best match point//////////////////////
-    str_matchPoint bestMatchPoint;
-    bestMatchPointFilter(VEC_matchPoints[downSamplingNum-stopMatchLayer],bestMatchPoint);
+    bestMatchPointFilter(VEC_matchPoints[downSamplingNum],bestMatchPoint);
     if(bestMatchPoint.matchValue<thresholdValue){
         qDebug()<<"bestMatchPoint.matchValue<thresholdValue";
-        matchStatus=false;
-        return;
+        return bestMatchPoint;
     }
-    nccMatchScore=bestMatchPoint.matchValue;
-    nccMatchPoint.x=bestMatchPoint.matchPoint.x*pow(2,stopMatchLayer);
-    nccMatchPoint.y=bestMatchPoint.matchPoint.y*pow(2,stopMatchLayer);
-    nccMatchAngle=bestMatchPoint.angle;
     VEC_matchPointsxx=VEC_matchPoints;
-}
-
-float NCC_Match::getMatchScore()
-{
-    return nccMatchScore;
-}
-
-int NCC_Match::getMatchAngle()
-{
-    return nccMatchAngle;
-}
-
-void NCC_Match::setRotateAndMaskFlag(bool f1, bool f2)
-{
-    enableRotate=f1;
-    enableMask=f2;
+    return bestMatchPoint;
 }
 
 void NCC_Match::rotateMat(cv::Mat&temp,cv::Mat&dst, float rotateAngle)
@@ -413,85 +336,8 @@ void NCC_Match::generateDownSampleSrc(cv::Mat &src)
     }
 }
 
-int NCC_Match::nccCoarseMatch(ushort matchLayer,std::vector<std::vector<str_matchPoint>>&VEC_matchPoints)
-{
-    if(enableRotate){
-        return nccRotateCoarseMatch(matchLayer,angleMatchRange,VEC_matchPoints);
-    }else{
-        return nccUnRotateCoarseMatch(matchLayer,VEC_matchPoints);
-    }
-}
-
-void NCC_Match::nccPreciseMatch(int layer,std::vector<std::vector<str_matchPoint>>&VEC_matchPoints)
-{
-    if(enableRotate){
-        nccRotatePreciseMatch(layer,angleMatchRange,VEC_matchPoints);
-        return;
-    }else{
-        nccUnRotatePreciseMatch(layer,VEC_matchPoints);
-    }
-}
-
-void NCC_Match::nccRotateMatch(ushort matchLayer,float&matchValue,cv::Point&matchPoint,ushort&bestMatchAngle,ushort angleMatchRange,ushort matchStepSize)
-{
-    ushort num=angleMatchRange<<1;
-    ushort angle=360-angleMatchRange;
-    for(ushort i=0;i<=num;i+=matchStepSize){
-        ushort index=(i+angle)%360;
-        float tmpValue=-2;
-        nccPointMatch(vec_downSampleSrcImg[matchLayer],VEC_rotateTempData[downSamplingNum-matchLayer][index],matchPoint,&tmpValue);
-        if(tmpValue>matchValue){
-            bestMatchAngle=index;
-            matchValue=tmpValue;
-        }
-    }
-}
-
-int NCC_Match::nccUnRotateCoarseMatch(ushort matchLayer, std::vector<std::vector<str_matchPoint> > &VEC_matchPoints)
-{
-    testTimer.restart();
-    //////////////匹配范围由模板较小的那条边的一半决定//////////////////////
-    ushort startMatchX=VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols>>1;
-    ushort startMatchY=VEC_rotateTempData[downSamplingNum-matchLayer][0].imgRows>>1;
-    ushort minValue=startMatchX>startMatchY?startMatchY:startMatchX;
-    ushort colRange=vec_downSampleSrcImg[matchLayer].cols-minValue;
-    ushort rowRange=vec_downSampleSrcImg[matchLayer].rows-minValue;
-    std::vector<str_matchPoint> matchPoints;
-    for(int i=minValue;i<colRange;++i){
-        short int j=0;
-#pragma omp parallel for private(j)
-        for(j=minValue;j<rowRange;++j){
-            float value=-2;
-            cv::Point point(i,j);
-            nccPointMatch(vec_downSampleSrcImg[matchLayer],VEC_rotateTempData[downSamplingNum-matchLayer][0],point,&value);
-            if(value>layerThreshold[matchLayer])
-            {
-                str_matchPoint tmpMatchPointData;
-                tmpMatchPointData.angle=0;
-                tmpMatchPointData.matchPoint=point;
-                tmpMatchPointData.matchValue=value;
-#pragma omp critical
-                {
-                    matchPoints.push_back(tmpMatchPointData);
-                }
-            }
-        }
-    }
-    VEC_matchPoints.push_back(matchPoints);
-    vec_matchTime.push_back(testTimer.elapsed());
-    if(matchPoints.size()==0&&--matchLayer>=0){
-        int num=VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols<VEC_rotateTempData[downSamplingNum-matchLayer][0].imgRows?VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols:VEC_rotateTempData[downSamplingNum-matchLayer][0].imgRows;
-        if(num<40){
-            nccUnRotateCoarseMatch(matchLayer,VEC_matchPoints);
-            cout<<"up sample to match!!!!!!"<<endl;
-            cout<<"up sample to match!!!!!!"<<endl;
-        }
-    }
-    return matchLayer;
-}
-
-int NCC_Match::nccRotateCoarseMatch(ushort matchLayer, ushort angleRange, std::vector<std::vector<str_matchPoint> > &VEC_matchPoints)
-{
+void NCC_Match::nccCoarseMatch(ushort matchLayer,std::vector<std::vector<NccMatchResult>>&VEC_matchPoints,ushort angleMatchRange)
+{       
     testTimer.restart();
     //////////////匹配范围由模板较小的那条边的一半决定//////////////////////
     ushort startMatchX=VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols>>1;
@@ -500,7 +346,7 @@ int NCC_Match::nccRotateCoarseMatch(ushort matchLayer, ushort angleRange, std::v
     ushort minValue=startMatchX>startMatchY?startMatchY:startMatchX;
     ushort colRange=vec_downSampleSrcImg[matchLayer].cols-minValue;
     ushort rowRange=vec_downSampleSrcImg[matchLayer].rows-minValue;
-    std::vector<str_matchPoint> matchPoints;
+    std::vector<NccMatchResult> matchPoints;
     short int i=minValue;
     for(i=minValue;i<colRange;++i){
 #pragma omp parallel for
@@ -508,12 +354,12 @@ int NCC_Match::nccRotateCoarseMatch(ushort matchLayer, ushort angleRange, std::v
             cv::Point point(i,j);
             ushort angle=0;
             float value=-2;
-            nccRotateMatch(matchLayer,value,point,angle,angleRange,coarseMatchAngleStepSize);
+            nccRotateMatch(matchLayer,value,point,angle,angleMatchRange,coarseMatchAngleStepSize);
 #pragma omp critical
             if(value>layerThreshold[matchLayer])
             {
-                str_matchPoint tmpMatchPointData;
-                tmpMatchPointData.angle=angle;
+                NccMatchResult tmpMatchPointData;
+                tmpMatchPointData.matchAngle=angle;
                 tmpMatchPointData.matchPoint=point;
                 tmpMatchPointData.matchValue=value;
                 matchPoints.push_back(tmpMatchPointData);
@@ -522,35 +368,27 @@ int NCC_Match::nccRotateCoarseMatch(ushort matchLayer, ushort angleRange, std::v
     }
     VEC_matchPoints.push_back(matchPoints);
     vec_matchTime.push_back(testTimer.elapsed());
-
-    if(matchPoints.size()==0&&--matchLayer>=0){
-        ushort num=(VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols<VEC_rotateTempData[downSamplingNum-matchLayer][0].imgRows)?VEC_rotateTempData[downSamplingNum-matchLayer][0].imgCols:VEC_rotateTempData[downSamplingNum-matchLayer][0].imgRows;
-        if(num<40){
-            nccRotateCoarseMatch(matchLayer,angleRange,VEC_matchPoints);
-        }
-    }
-    return matchLayer;
 }
 
-void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<std::vector<str_matchPoint>>&VEC_matchPoints)
+
+void NCC_Match::nccPreciseMatch(int layer,std::vector<std::vector<NccMatchResult>>&VEC_matchPoints)
 {
     for(short int i=layer-1;i>=0;--i){
         testTimer.restart();
         int srcCol=vec_downSampleSrcImg[i].cols;
         int srcRow=vec_downSampleSrcImg[i].rows;
-        //int num=srcCol*srcRow*360;
-        int num=srcCol*srcRow;
+        int num=srcCol*srcRow*360;
         QBitArray flagBitArray(num);
         flagBitArray.fill(false);
 
-        std::vector<str_matchPoint> validMatchPoints;
+        std::vector<NccMatchResult> validMatchPoints;
         int index=layer-i-1;
 
         int m=layerAngleMatchRange[i];
         int n=layerCoordinateMatchRange[i];
         int vecSize=VEC_matchPoints[index].size();
 
-        str_matchPoint layerMaxMatchPoint;
+        NccMatchResult layerMaxMatchPoint;
         layerMaxMatchPoint.matchValue=-2;
         for(short int j=0;j<vecSize;++j){
             short int x=(VEC_matchPoints[index][j].matchPoint.x<<1)-n;
@@ -561,7 +399,7 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
             ushort pointMatchRange=n<<1;
             ushort angleMatchRange=m<<1;
 
-            str_matchPoint maxMatchPointData;
+            NccMatchResult maxMatchPointData;
             maxMatchPointData.matchValue=-2;
             short int offsetX=0;
             for(offsetX=0;offsetX<=pointMatchRange;++offsetX){
@@ -570,10 +408,9 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
                 for(offsetY=0;offsetY<=pointMatchRange;++offsetY){
                     uint xx=x+offsetX;
                     uint yy=y+offsetY;
-                    ushort matchAngle=(VEC_matchPoints[index][j].angle-m+360)%360;
+                    ushort matchAngle=(VEC_matchPoints[index][j].matchAngle-m+360)%360;
                     cv::Point point(xx,yy);
-                    //int tempNum=xx*srcRow*360+yy*360+matchAngle;
-                    int tempNum=xx*srcRow+yy;
+                    int tempNum=xx*srcRow*360+yy*360+matchAngle;
                     if(flagBitArray.at(tempNum))
                         continue;
                     short int offsetAngle=0;
@@ -593,7 +430,7 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
                         {
                             if(value>=layerThreshold[i]&&value>maxMatchPointData.matchValue)
                             {
-                                maxMatchPointData.angle=matchAngle;
+                                maxMatchPointData.matchAngle=matchAngle;
                                 maxMatchPointData.matchPoint=point;
                                 maxMatchPointData.matchValue=value;
                             }
@@ -614,86 +451,27 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
         }
         if(i<=4){
             bestMatchPointFilter(validMatchPoints,layerMaxMatchPoint);
-            std::vector<str_matchPoint>().swap(validMatchPoints);
+            std::vector<NccMatchResult>().swap(validMatchPoints);
             validMatchPoints.push_back(layerMaxMatchPoint);
         }
 
         VEC_matchPoints.push_back(validMatchPoints);
         vec_matchTime.push_back(testTimer.elapsed());
-        ////////stop precise match int the stop layer/////////////
-        //if(i<=stopMatchLayer)break;
     }
 }
 
-void NCC_Match::nccUnRotatePreciseMatch(ushort layer, std::vector<std::vector<str_matchPoint> > &VEC_matchPoints)
+void NCC_Match::nccRotateMatch(ushort matchLayer,float&matchValue,cv::Point&matchPoint,ushort&bestMatchAngle,ushort angleMatchRange,ushort matchStepSize)
 {
-    for(short int i=layer-1;i>=0;i--){
-        testTimer.restart();
-        uint srcCol=vec_downSampleSrcImg[i].cols;
-        uint srcRow=vec_downSampleSrcImg[i].rows;
-        uint num=srcCol*srcRow;
-        QBitArray flagBitArray(num);
-        flagBitArray.fill(false);
-        std::vector<str_matchPoint> validMatchPoints;
-        ushort index=layer-i-1;
-
-        ushort n=layerCoordinateMatchRange[i];
-        ushort vecSize=VEC_matchPoints[index].size();
-        for(ushort j=0;j<vecSize;++j){
-            short int x=(VEC_matchPoints[index][j].matchPoint.x<<1)-n;
-            short int y=(VEC_matchPoints[index][j].matchPoint.y<<1)-n;
-            x=(x>0)?x:0;
-            y=(y>0)?y:0;
-            //////////different layer has different match range/////////////////
-            ushort pointMatchRange=n<<1;
-            str_matchPoint maxMatchPointData;
-            maxMatchPointData.matchValue=-2;
-            for(ushort offsetX=0;offsetX<=pointMatchRange;++offsetX){
-                short int offsetY=0;
-#pragma omp parallel for private(offsetY) schedule(dynamic)
-                for(offsetY=0;offsetY<=pointMatchRange;++offsetY){
-                    ushort xx=x+offsetX;
-                    ushort yy=y+offsetY;
-                    cv::Point point(xx,yy);
-                    ///////point match//////////////////
-                    uint tempNum=xx*srcRow+yy;
-                    if(flagBitArray.at(tempNum))
-                        continue;
-                    float value=-2;
-                    if(i<=downSamplingNum-generateTempDataLayer){
-                        str_img_data tempData;
-                        calculateImgData(vec_downSampleTemp[i],vec_downSampleMask[i],&tempData);
-                        nccPointMatch(vec_downSampleSrcImg[i],tempData,point,&value);
-                    }else
-                        nccPointMatch(vec_downSampleSrcImg[i],VEC_rotateTempData[downSamplingNum-i][0],point,&value);
-#pragma omp critical
-                    {
-                        if(value>=layerThreshold[i]&&value>maxMatchPointData.matchValue){
-                            maxMatchPointData.angle=0;
-                            maxMatchPointData.matchPoint=point;
-                            maxMatchPointData.matchValue=value;
-                        }
-                        flagBitArray.setBit(tempNum,true);
-                    }
-                }
-            }
-            if(maxMatchPointData.matchValue!=-2){
-                validMatchPoints.push_back(maxMatchPointData);
-            }
+    ushort num=angleMatchRange<<1;
+    ushort angle=360-angleMatchRange;
+    for(ushort i=0;i<=num;i+=matchStepSize){
+        ushort index=(i+angle)%360;
+        float tmpValue=-2;
+        nccPointMatch(vec_downSampleSrcImg[matchLayer],VEC_rotateTempData[downSamplingNum-matchLayer][index],matchPoint,&tmpValue);
+        if(tmpValue>matchValue){
+            bestMatchAngle=index;
+            matchValue=tmpValue;
         }
-        if(validMatchPoints.size()==0){
-            cout<<"this layer no match point! "<<i<<endl;
-            cout<<"this layer threshold:"<<layerThreshold[i]<<endl;
-            break;
-        }
-        if(i<=2){
-            str_matchPoint point;
-            bestMatchPointFilter(validMatchPoints,point);
-            std::vector<str_matchPoint>().swap(validMatchPoints);
-            validMatchPoints.push_back(point);
-        }
-        VEC_matchPoints.push_back(validMatchPoints);
-        vec_matchTime.push_back(testTimer.elapsed());
     }
 }
 
@@ -790,7 +568,7 @@ void NCC_Match::imgDownSampling(cv::Mat&src,cv::Mat&dst,ushort layerNum)
     }
 }
 
-void NCC_Match::bestMatchPointFilter(std::vector<str_matchPoint>&src,str_matchPoint&dst)
+void NCC_Match::bestMatchPointFilter(std::vector<NccMatchResult>&src,NccMatchResult&dst)
 {
     float value=-2;
     int index=-1;
@@ -806,9 +584,6 @@ void NCC_Match::bestMatchPointFilter(std::vector<str_matchPoint>&src,str_matchPo
 
 void NCC_Match::dataClearBeforeMatch()
 {
-    nccMatchScore=-2;
-    nccMatchPoint=cv::Point(0,0);
-    nccMatchAngle=0;
     vec_downSampleSrcImg.clear();
     vec_matchTime.clear();
 }

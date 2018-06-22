@@ -92,9 +92,9 @@ private:
     bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnableMask,bool isEnableRotate);
     bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,NCC_Match&nccmatch,bool isEnableMask,bool isEnableRotate,uint downSampleTime=0);
     void outPutMatchResult();
-    void outPutMatchResult(NCC_Match&nccmatch);
+    void outPutMatchResult(NCC_Match&nccmatch,NccMatchResult&);
     cv::Mat drawResultOnMat();
-    cv::Mat drawResultOnMat(NCC_Match&nccmatch);
+    cv::Mat drawResultOnMat(NccMatchResult&);
     void getRoiMat(cv::Mat&src,cv::Mat&mat,int x,int y,int w,int h);
     void getRoiMat(cv::Mat&src,cv::Mat&mat);
     void restorePaintingStatus();
@@ -113,11 +113,9 @@ private:
     void preProcessTemplate(cv::Mat&temp,int thresholdValue=0);
     void preProcessSource(cv::Mat&src,int thresholdValue=0);
 private:
-    cv::Point matchPoint;
-    float matchScore=-2;
-    ushort matchAngle=0;
     bool matchStatus=false;
     bool nccStatus=false;
+    NccMatchResult matchResult;
 protected:
     void mousePressEvent(QMouseEvent *event);
     void mouseReleaseEvent(QMouseEvent *event);
