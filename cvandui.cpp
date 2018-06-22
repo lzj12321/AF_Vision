@@ -6,7 +6,7 @@
 #include<QDebug>
 
 cvAndUi::cvAndUi()
-{asdsadsadsa
+{
 }
 
 double cvAndUi::adjustMatSizeToShow(cv::Mat&mat,cv::Mat&dst, QLabel *label)

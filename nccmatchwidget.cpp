@@ -109,7 +109,7 @@ void nccMatchWidget::on_pushButton_4_clicked()
     std::string name = code->fromUnicode(filename).data();
     if(!name.empty())
     {
-        cv::Mat src=cv::imread(name,1);
+        cv::Mat src=cv::imread(name,cv::IMREAD_COLOR);
         if(!src.empty())
         {
             sourceMat=src.clone();
@@ -379,7 +379,7 @@ void nccMatchWidget::on_pushButton_5_clicked()
 {
     NCC_Match temporyNccMatch;
     float threshold=ui->lineEdit_2->text().toFloat();
-    if(threshold<=0)
+    if(threshold<=0||threshold>1)
         threshold=0.5;
 
     int angleMatchRange=ui->lineEdit_6->text().toInt();
@@ -782,13 +782,13 @@ void nccMatchWidget::imgLoad(int model)
 {
     if(modelNum==0)return;
     if(model==-1)return;
-    templateMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("temp.bmp"),1);
+    templateMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("temp.bmp"),cv::IMREAD_COLOR);
     temporyTempMat=templateMat.clone();
 
-    tempMaskShowMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("tempMask.bmp"),1);
+    tempMaskShowMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("tempMask.bmp"),cv::IMREAD_COLOR);
     temporyTempMaskShowMat=tempMaskShowMat.clone();
 
-    maskMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("mask.bmp"),0);
+    maskMat=cv::imread(paramPath+std::string("/")+vecModelName[model].toStdString()+std::string("mask.bmp"),cv::IMREAD_GRAYSCALE);
     temporyMaskMat=maskMat.clone();
 }
 

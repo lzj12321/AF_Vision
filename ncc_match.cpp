@@ -301,7 +301,7 @@ void NCC_Match::nccMatch(cv::Mat &src, float thresholdValue, bool maskFlag, bool
 {
     dataClearBeforeMatch();
     matchStatus=true;
-   // startMatchLayer=downSamplingNum;
+    // startMatchLayer=downSamplingNum;
 
     if(VEC_rotateTempData.size()==0||src.empty()||src.cols<VEC_rotateTempData[0][0].imgCols||src.rows<VEC_rotateTempData[0][0].imgRows)
     {
@@ -538,6 +538,7 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
         testTimer.restart();
         int srcCol=vec_downSampleSrcImg[i].cols;
         int srcRow=vec_downSampleSrcImg[i].rows;
+        //int num=srcCol*srcRow*360;
         int num=srcCol*srcRow;
         QBitArray flagBitArray(num);
         flagBitArray.fill(false);
@@ -571,6 +572,7 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
                     uint yy=y+offsetY;
                     ushort matchAngle=(VEC_matchPoints[index][j].angle-m+360)%360;
                     cv::Point point(xx,yy);
+                    //int tempNum=xx*srcRow*360+yy*360+matchAngle;
                     int tempNum=xx*srcRow+yy;
                     if(flagBitArray.at(tempNum))
                         continue;
@@ -619,7 +621,7 @@ void NCC_Match::nccRotatePreciseMatch(int layer, ushort angleRange, std::vector<
         VEC_matchPoints.push_back(validMatchPoints);
         vec_matchTime.push_back(testTimer.elapsed());
         ////////stop precise match int the stop layer/////////////
-        if(i<=stopMatchLayer)break;
+        //if(i<=stopMatchLayer)break;
     }
 }
 
@@ -648,7 +650,7 @@ void NCC_Match::nccUnRotatePreciseMatch(ushort layer, std::vector<std::vector<st
             maxMatchPointData.matchValue=-2;
             for(ushort offsetX=0;offsetX<=pointMatchRange;++offsetX){
                 short int offsetY=0;
-                #pragma omp parallel for private(offsetY) schedule(dynamic)
+#pragma omp parallel for private(offsetY) schedule(dynamic)
                 for(offsetY=0;offsetY<=pointMatchRange;++offsetY){
                     ushort xx=x+offsetX;
                     ushort yy=y+offsetY;
@@ -664,7 +666,7 @@ void NCC_Match::nccUnRotatePreciseMatch(ushort layer, std::vector<std::vector<st
                         nccPointMatch(vec_downSampleSrcImg[i],tempData,point,&value);
                     }else
                         nccPointMatch(vec_downSampleSrcImg[i],VEC_rotateTempData[downSamplingNum-i][0],point,&value);
-                    #pragma omp critical
+#pragma omp critical
                     {
                         if(value>=layerThreshold[i]&&value>maxMatchPointData.matchValue){
                             maxMatchPointData.angle=0;
