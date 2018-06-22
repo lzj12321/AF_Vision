@@ -30,7 +30,7 @@ STR_Vision_Result nccMatchWidget::ncc_Match(cv::Mat &srcMat,int model)
 {
     STR_Vision_Result str_nccMatchResult;
     --model;
-    matchStatus=false;
+    bool matchStatus=false;
 
     if(model<0||modelNum==0||model>=modelNum){
         str_nccMatchResult.errorFlag=STATION_OR_MODEL_ERROR;
@@ -308,7 +308,7 @@ void nccMatchWidget::on_pushButton_7_clicked()
     if(!temporyTempMaskShowMat.empty())
         tempMaskShowMat=temporyTempMaskShowMat.clone();
 
-    nccStatus=nccGenerateTemplate(templateMat,maskMat,isEnableMask,isEnableRotate);
+    bool nccStatus=nccGenerateTemplate(templateMat,maskMat);
     if(!nccStatus){
         ui->textEdit->clear();
         ui->textEdit->append(QString("generate template failed!"));
@@ -391,7 +391,7 @@ void nccMatchWidget::on_pushButton_5_clicked()
     int downSampleTime=ui->lineEdit->text().toInt();
 
     cv::Mat temp=templateMat.clone();
-    nccGenerateTemplate(temp,maskMat,temporyNccMatch,isEnableMask,isEnableRotate,downSampleTime);
+    nccGenerateTemplate(temp,maskMat,temporyNccMatch,downSampleTime);
 
     QTime nccMatchTimer;
     nccMatchTime=0;
@@ -411,7 +411,7 @@ void nccMatchWidget::on_pushButton_5_clicked()
     showMatOnDlg(tempMaskShowMat,ui->label_5);
 }
 
-bool nccMatchWidget::nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnableMask,bool isEnableRotate)
+bool nccMatchWidget::nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask)
 {
     if(temp.empty()||mask.empty()||temp.size!=mask.size)
     {
@@ -433,7 +433,7 @@ bool nccMatchWidget::nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnable
     return true;
 }
 
-bool nccMatchWidget::nccGenerateTemplate(cv::Mat &temp, cv::Mat &mask, NCC_Match &nccmatch,bool isEnableMask,bool isEnableRotate,uint downSampleTime)
+bool nccMatchWidget::nccGenerateTemplate(cv::Mat &temp, cv::Mat &mask, NCC_Match &nccmatch,uint downSampleTime)
 {
     if(temp.empty()||mask.empty()||temp.size!=mask.size)return false;
     cv::Mat t,m;
@@ -541,6 +541,7 @@ void nccMatchWidget::outPutMatchResult(NCC_Match &nccmatch,NccMatchResult&nccmat
 
 cv::Mat nccMatchWidget::drawResultOnMat()
 {
+    bool matchStatus=false;
     cv::Mat resultMat;
     if(sourceMat.empty())return resultMat;
     if(sourceMat.type()==CV_8UC1)
@@ -605,6 +606,7 @@ cv::Mat nccMatchWidget::drawResultOnMat()
 
 cv::Mat nccMatchWidget::drawResultOnMat(NccMatchResult&nccMatchResult)
 {
+    bool matchStatus=false;
     cv::Mat resultMat;
     if(sourceMat.empty())return resultMat;
     if(sourceMat.type()==CV_8UC1)
@@ -845,13 +847,11 @@ void nccMatchWidget::nccInitialize(int model)
     imgLoad(model);
     setModelParam(model);
     uiInitialize(model);
-
     if(templateMat.empty()||maskMat.empty()){
-        nccStatus=false;
+        ui->textEdit->clear();
+        ui->textEdit->append(QString("generate template failed!"));
         return;
     }
-    else
-        nccStatus=true;
     cv::Mat t,m;
     if(templateMat.type()!=CV_8UC1){
         cv::cvtColor(templateMat,t,cv::COLOR_RGB2GRAY);
@@ -861,13 +861,7 @@ void nccMatchWidget::nccInitialize(int model)
         cv::cvtColor(maskMat,m,cv::COLOR_RGB2GRAY);
     }else
         m=maskMat;
-    //preProcessTemplate(t,vecThresholdValue[model]);
     nccmatch.generateTemplateAndMask(t,m,vecDownSampleTime[model]);
-}
-
-void nccMatchWidget::setParamPath(QString path)
-{
-    paramPath=path.toStdString();
 }
 
 void nccMatchWidget::nccWidgetIni(cv::Mat &t)
@@ -886,6 +880,11 @@ void nccMatchWidget::nccWidgetIni(cv::Mat &t)
         showMatOnDlg(s,ui->label_6,&ratio);
     }
     uiInitialize(comboxCurrentIndex);
+}
+
+void nccMatchWidget::setcurrentMatchModel(const int matchModel)
+{
+    currentMatchModel=matchModel;
 }
 
 int nccMatchWidget::getCurrentMatchModel()

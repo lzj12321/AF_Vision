@@ -21,13 +21,9 @@ public:
     STR_Vision_Result ncc_Match(cv::Mat&mat,int model=-1);
     STR_Vision_Result getNccMatchResultFormat();
     cv::Mat getResultImg(cv::Mat&src);
-    cv::Point2f getMatchPoint();
-    float getMatchAngle();
-    void pointTransmit(cv::Point2f&p);
     void nccInitialize(int model=-1);
-    void setParamPath(QString path);
     void nccWidgetIni(cv::Mat&t);
-    int currentMatchModel=-1;
+    void setcurrentMatchModel(const int);
     int getCurrentMatchModel();
 protected:
     void closeEvent(QCloseEvent *event);
@@ -50,15 +46,14 @@ private slots:
 
 private:
     int modelNum=0;
+    int currentMatchModel=-1;
     int comboxCurrentIndex=-1;
+
     std::string paramPath;
     Ui::nccMatchWidget *ui;
     cv::Mat sourceMat;
     cv::Mat templateMat,maskMat,tempMaskShowMat;
     cv::Mat temporyTempMat,temporyMaskMat,temporyTempMaskShowMat;
-
-    bool isEnableMask=true;
-    bool isEnableRotate=true;
 
     int roiX=0;
     int roiY=0;
@@ -89,8 +84,8 @@ private:
     std::vector<QString>vecMatchThreshold;
     std::vector<int>vecThresholdValue;
 private:
-    bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,bool isEnableMask,bool isEnableRotate);
-    bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,NCC_Match&nccmatch,bool isEnableMask,bool isEnableRotate,uint downSampleTime=0);
+    bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask);
+    bool nccGenerateTemplate(cv::Mat&temp,cv::Mat&mask,NCC_Match&nccmatch,uint downSampleTime=0);
     void outPutMatchResult();
     void outPutMatchResult(NCC_Match&nccmatch,NccMatchResult&);
     cv::Mat drawResultOnMat();
@@ -113,8 +108,6 @@ private:
     void preProcessTemplate(cv::Mat&temp,int thresholdValue=0);
     void preProcessSource(cv::Mat&src,int thresholdValue=0);
 private:
-    bool matchStatus=false;
-    bool nccStatus=false;
     NccMatchResult matchResult;
 protected:
     void mousePressEvent(QMouseEvent *event);
